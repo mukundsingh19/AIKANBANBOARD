@@ -1,0 +1,39 @@
+import pg from "pg";
+import { ENV } from "./env.js";
+
+const { Pool } = pg;
+
+const pool = new Pool({
+  connectionString: ENV.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+pool.on("error", (err) => {
+  console.error("Unexpected PostgreSQL pool error:", err);
+});
+
+export const query = (text, params) => pool.query(text, params);
+
+export const withTransaction = async (callback) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const result = await callback(client);
+
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+export { pool };
+
